@@ -27,7 +27,7 @@ display_live_plot = True
 # Simulation duration
 simulation_duration = 60
 # Training episodes
-training_episodes = 10000
+training_episodes = 1010
 # Time step between actions
 time_step = 1
 
@@ -40,13 +40,13 @@ MEMORY_SIZE = 1000000
 # Sample batch size for policy network update
 BATCH_SIZE = 8
 # Number of game steps to play before starting training (all random actions)
-REPLAY_START_SIZE = simulation_duration * 100
+REPLAY_START_SIZE = simulation_duration * 10
 
 # Number of steps between policy -> target network update
 SYNC_TARGET_STEPS = simulation_duration
 # Exploration rate (episolon) is probability of choosign a random action
 EXPLORATION_MAX = 1
-EXPLORATION_MIN = 0.005
+EXPLORATION_MIN = 0.01
 # Reduction in epsilon with each game step
 EXPLORATION_DECAY = 0.9995
 
@@ -54,7 +54,6 @@ EXPLORATION_DECAY = 0.9995
 adjust_plot_factor = 0
 
 ### Define DQN (Deep Q Network) class, used for both policy and target nets ###
-# build and structured according to https://github.com/MichaelAllen1966/learninghospital
 
 class DQN(nn.Module):
     """Deep Q Network. Used for both policy (action) and target (Q) networks."""
@@ -97,6 +96,8 @@ class DQN(nn.Module):
 
 ### Define DDQN (Deep Q Network) class, used for both policy and target nets ###
 # Please not that the agent uses the ddqn and not the previous dqn
+# Model build and structured according to https://github.com/MichaelAllen1966/learninghospital
+
 class DDQN(nn.Module):
     """Duelling Deep Q Network. Used for both policy (action) and target (Q) networks."""
 
@@ -164,8 +165,10 @@ def optimize(policy_net, target_net, memory, run):
     # policy_net.exploration_rate = max(EXPLORATION_MIN-(0.1*(run//50)), policy_net.exploration_rate)
 
     # Execute the last n runs with exploration rate of 0
-    if (training_episodes-10) < run:
+    if run > 9990:
         policy_net.exploration_rate = max(0, policy_net.exploration_rate)
+    #elif run > 150: 
+    #    policy_net.exploration_rate = max(EXPLORATION_MIN*0.05, policy_net.exploration_rate)
     else:
         policy_net.exploration_rate = max(EXPLORATION_MIN, policy_net.exploration_rate)
 
@@ -262,14 +265,14 @@ def plot(run_results, run_explorations, run_total_rewards, episode_details, stat
     # Clear previous plot on ax 2
     ax2.clear()
     # Set labels
-    ax2.set_ylabel('Total reward of each run (adjusted for negative reward)', color='forestgreen', size=size)
+    ax2.set_ylabel('Total reward of each run', color='forestgreen', size=size)
     # Move axis to the left 
     #ax2.spines["left"].set_position(("axes", -0.15))
     #ax2.spines["left"].set_visible(True)
     #ax2.yaxis.set_label_position('left')
     #ax2.yaxis.set_ticks_position('left')
     # Set title
-    ax2.set_title('Exploration rate and Total reward (for all {} runs)'.format(len(run_results)), size=size)
+    ax2.set_title('Exploration rate and total reward (for all {} runs)'.format(len(run_results)), size=size)
     # Adjust for negative reward training term (-20 * 480)
     run_total_rewards = [r+simulation_duration*adjust_plot_factor for r in run_total_rewards]  
     # Plot data
@@ -324,9 +327,9 @@ def plot(run_results, run_explorations, run_total_rewards, episode_details, stat
     # Clear plot of previous run
     ax4.clear()
     # Set title
-    ax4.set_title('Results of run {r}: total_A={a}, total_B={b} and total_reward={t}'.format(r=len(run_results), a=state[0][-2], b=state[0][-1], t=sum(rewards)), size=size)
+    ax4.set_title('Results of run {r}: total_A={a}, total_B={b} and total_reward={t: .2f}'.format(r=len(run_results), a=state[0][-2], b=state[0][-1], t=sum(rewards)), size=size)
     # Set labels
-    ax4.set_ylabel('Adjusted accumulated reward', size=size)    
+    ax4.set_ylabel('Accumulated reward', size=size)    
     # Set limit 
     ax4.set_xlim(0, simulation_duration)
     # Plot data
