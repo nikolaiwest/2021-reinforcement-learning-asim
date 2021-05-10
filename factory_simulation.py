@@ -5,7 +5,7 @@ class Factory_Simulation():
     """ A simple manufacturing simulation for scheduling with five stations and two products, 
     created using SimPy with an n OpenAI gym-like interface for Reinforcement Learning. """
 
-    def __init__(self, simulation_duration=120, time_step=1, setup_time=0, reward_value=0):
+    def __init__(self, simulation_duration=60, time_step=1, setup_time=0, reward_value=0):
         """ Constructor method for Factory_Simulation class. """
 
         # Set up duration for each simulation run (returns terminal state afterwards) and time steps 
@@ -24,12 +24,10 @@ class Factory_Simulation():
         self.process_time_b = [1, 2, 3, 4, 5] # ...
 
         # Set up standard deviation for process time variability
-        self.default_std_dev = .0
+        self.default_std_dev = .0 # deliberatly set to zero
 
         # Set up list to store fifo rule for one simulation run
         self.fifo_list = []
-        # Set up list to save all actions performed by the agent
-        self.all_actions = []
 
         # Set up time to get raw or semi materials
         self.time_to_get_material = 1
@@ -38,7 +36,7 @@ class Factory_Simulation():
         # Set up costs as negative rewards for storing material 
         self.cost_for_storage = 1
         # Set up price for raw material 
-        self.cost_for_raw_material = 10
+        self.cost_for_raw_material = 35
 
         # Set up counter for finished jobs
         self.finished_jobs_m1 = 0
@@ -47,9 +45,11 @@ class Factory_Simulation():
         self.finished_jobs_m4 = 0
         self.finished_jobs_m5 = 0
 
-        # Set up counter for reward according to product mix
+        # Set up counter for reward calculation according to product mix
         self.consecutive_production_of_a = 0 
         self.consecutive_production_of_b = 0
+        self.consecutive_switches_to_a = 0
+        self.consecutive_switches_to_b = 0
         self.consecutive_idle_states = 0
 
         # Set up A, R, S for rl-agent
@@ -58,7 +58,7 @@ class Factory_Simulation():
         self.state = dict()
 
         # Set up observation and action space sizes
-        self.observation_size = 12 # one for each container
+        self.observation_size = 2 # one for each container
         self.action_size = len(self.actions)
 
     def _get_next_job(self, finished_jobs):
@@ -73,26 +73,50 @@ class Factory_Simulation():
     def _calculate_sales_value(self, product_type):
         """ Returns the current sales value of the finished products A and B. """
         
-        # Value higher amounts of finished goods (regardless of type)
-        # return 100 + self.env.material_m5_a.level + self.env.material_m5_b.level
+        # RF1: Simply return a default value for finished goods
+        # return 300 
 
-        # Value mix of products in terms of the over-all reward
+        # RF2: Value mix of products in terms of the over-all reward
+        #'''
+        # Case 1: selection of product type A for manufacturing
         if product_type=='A':
+            # Increase consecutive for A counter by one
             self.consecutive_production_of_a += 1
+            # Reset the consecutive counter for B
             self.consecutive_production_of_b = 0
-            #return 110 - (10*self.consecutive_production_of_a)
-            return 100 * (0.9 ** (self.consecutive_production_of_a-1))
+            # Check if a switch from B to A has been made
+            if self.consecutive_production_of_a==1:
+                # Increase switch counter of A by one 
+                self.consecutive_switches_to_a+=1
+                # Return reward with positive reinforcement for switching behavior (max value 360)
+                return min(400, 200*(1.5**(self.consecutive_switches_to_a)))
+            else: 
+                # Reset switch counter of A 
+                self.consecutive_switches_to_a=0
+                # Return reward with negative reinforcement for switching behavior (min value of 120)
+                return max(100, 200*(0.75**(self.consecutive_production_of_a-1)))
+        
+        # Case 2: Selection of product type B for manufacturing
         elif product_type=='B':
+            # Increase consecutive for B counter by one
             self.consecutive_production_of_b += 1
+            # Reset the consecutive counter for B
             self.consecutive_production_of_a = 0
-            #return 110 - (10*self.consecutive_production_of_b)
-            return 100 * (0.9 ** (self.consecutive_production_of_b-1))
-
+            # Check if a switch from A to B has been made
+            if self.consecutive_production_of_b==1:
+                # Increase switch counter of B by one
+                self.consecutive_switches_to_b+=1
+                # Return reward with positive reinforcement for switching behavior (max value 360)
+                return min(400, 200*(1.5**(self.consecutive_switches_to_b)))
+            else: 
+                # Reset switch counter of B
+                self.consecutive_switches_to_b=0
+                # Return reward with negative reinforcement for switching behavior (min value of 120)
+            return max(100, 200*(0.75**(self.consecutive_production_of_b-1)))
+        # Case 3: Raise error if input type is wrong
         else:
             raise ValueError('{} --> requested type is not in the list of allowed product types [A, B]'.format(product_type)) 
-        
-        # Simply return a default value for finished goods
-        # return 100 
+        #'''
 
     def _run_machine_1(self):
         """ Runs the manufacutring programm of Machine 1 and needs to be called as a SimPy Process. """
@@ -355,7 +379,7 @@ class Factory_Simulation():
     def _get_observations(self):
         """ Returns the the current levels of all twelve buffers as observation list. """
         observations = self._get_buffer_level_as_list()
-        return observations
+        return observations[:2]
                    
     def _islegal(self, action):
         """ Confirms that the selected action is in the action space, else an exception is raised. """
@@ -377,8 +401,6 @@ class Factory_Simulation():
 
     def _perform_action(self, action):
         """ Changes the environment according to the selected action. """
-        # Add action to all_actions
-        self.all_actions += [action]
         # For 1 and 2: release new raw material and add job to fifo list
         if action == 0:
             # Add new job to fifo list
@@ -435,12 +457,13 @@ class Factory_Simulation():
         # Reset counter for reward according to product mix
         self.consecutive_production_of_a = 0 
         self.consecutive_production_of_b = 0
+        self.consecutive_switches_to_a = 0
+        self.consecutive_switches_to_b = 0
         self.consecutive_idle_states = 0 
 
         # Reset simulation parameters for next run
         self.next_time_stop = 0
         self.fifo_list = []
-        self.all_actions = []
         self.reward = self.initial_reward
 
         # Run all machines
@@ -487,7 +510,7 @@ class Factory_Simulation():
             self.consecutive_idle_states += 1
 
         # Adjust reward for storage costs and return as new reward 
-        reward = self.reward - cost_for_storage - self.consecutive_idle_states
+        reward = self.reward - cost_for_storage - (self.consecutive_idle_states*5)
 
         # Check if terminal state was reached (t=simulation_duration)
         terminal = True if (self.env.now >= self.simulation_duration) else False
